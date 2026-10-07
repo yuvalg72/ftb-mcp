@@ -28,7 +28,7 @@ python3 -m venv .venv
 ftb-mcp --db-path kafkova.ftb                      # http://127.0.0.1:8000/mcp
 ftb-mcp --gedcom-path kafkova.ged                  # a GEDCOM export instead
 ftb-mcp --db-path kafkova.ged                      # .ged/.gedcom is detected too
-ftb-mcp --db-path kafkova.ftb --host 0.0.0.0 --port 9000 --path /mcp
+ftb-mcp --db-path kafkova.ftb --host 127.0.0.1 --port 9000 --path /mcp
 ftb-mcp --db-path kafkova.ftb --transport stdio    # for stdio-based clients
 ```
 
@@ -46,6 +46,14 @@ Exactly one of `--db-path` / `--gedcom-path` is required.
 
 An `.ftb` file is opened with SQLite's `mode=ro` URI; a GEDCOM file is read once into
 memory. No tool writes, and there is no code path that can modify either file.
+
+**Security boundary:** MCP over HTTP/SSE is restricted to loopback interfaces.
+The server refuses `--host 0.0.0.0`, LAN/WAN addresses, and non-loopback names.
+The MCP tools expose sensitive information about living relatives, and this
+project does **not** provide application-level authentication. Do not directly
+publish its HTTP endpoint, including through a public tunnel. Remote clients
+need a separately reviewed TLS/authentication/authorization layer. Local
+`stdio` transport is available for clients on the same machine.
 
 ### Registering with Claude Code
 
