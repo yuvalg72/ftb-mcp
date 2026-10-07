@@ -28,7 +28,7 @@ python3 -m venv .venv
 ftb-mcp --db-path kafkova.ftb                      # http://127.0.0.1:8000/mcp
 ftb-mcp --gedcom-path kafkova.ged                  # a GEDCOM export instead
 ftb-mcp --db-path kafkova.ged                      # .ged/.gedcom is detected too
-ftb-mcp --db-path kafkova.ftb --host 0.0.0.0 --port 9000 --path /mcp
+ftb-mcp --db-path kafkova.ftb --host 127.0.0.1 --port 9000 --path /mcp
 ftb-mcp --db-path kafkova.ftb --transport stdio    # for stdio-based clients
 ```
 
@@ -46,6 +46,14 @@ Exactly one of `--db-path` / `--gedcom-path` is required.
 
 An `.ftb` file is opened with SQLite's `mode=ro` URI; a GEDCOM file is read once into
 memory. No tool writes, and there is no code path that can modify either file.
+
+**Security boundary:** MCP over HTTP/SSE is restricted to loopback interfaces.
+The server refuses `--host 0.0.0.0`, LAN/WAN addresses, and non-loopback names.
+The MCP tools expose sensitive information about living relatives, and this
+project does **not** provide application-level authentication. Do not directly
+publish its HTTP endpoint, including through a public tunnel. Remote clients
+need a separately reviewed TLS/authentication/authorization layer. Local
+`stdio` transport is available for clients on the same machine.
 
 ### Registering with Claude Code
 
@@ -78,9 +86,9 @@ claude mcp add --transport http ftb http://127.0.0.1:8000/mcp
 | Tool | Purpose |
 |---|---|
 | `get_relatives` | Parents, siblings, spouses, children with relationship types |
-| `get_ancestors` | Pedigree with Ahnentafel numbering |
+| `get_ancestors` | Pedigree with Ahnentafel numbering; `lineage=biological` (default) excludes adopted/foster links; `lineage=all` includes them with recorded parentage labels |
 | `get_descendants` | Descendant tree with per-generation counts |
-| `find_relationship_path` | Shortest kinship path plus a label such as `first cousin once removed` |
+| `find_relationship_path` | Shortest recorded kinship path; includes parentage roles on edges and flags adopted/foster ties explicitly |
 | `get_family` | One family: spouses, status, marriage/divorce events, ordered children |
 
 **Evidence and analysis**
@@ -99,6 +107,21 @@ the language actually used when it differs from the one requested.
 Media tools deliberately return no image bytes, no file names and no paths. Scanned-record
 descriptions often carry genealogical detail found nowhere else, so their text is exposed;
 the binary content is not.
+
+## Genealogical evidence and lineage safety
+
+`get_ancestors` defaults to **recorded natural-child** relationships, not all
+family ties. This prevents an adoptive or foster path from silently being presented
+as biological descent. Specify `lineage="all"` to include every recorded parent
+relationship; the returned nodes carry `parentage_recorded_as` and `family_id`.
+Other family tools continue to include adoptive/foster relationships. The
+`find_relationship_path` tool also returns recorded parentage per edge and flags
+paths that traverse adoptive/foster family ties; it must not be used as proof of
+biological descent.
+
+**Important:** An FTB/GEDCOM natural-child flag is an assertion in an editable
+family tree, not proof of biological or historical ancestry. Validate each
+generational link against independent sources before claiming a lineage.
 
 ## GEDCOM support
 

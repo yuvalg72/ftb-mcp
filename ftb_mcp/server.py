@@ -9,6 +9,7 @@ never image bytes or file paths.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import logging
 import os
 import sys
@@ -414,16 +415,25 @@ def get_relatives(
 @mcp.tool(
     description=(
         "Direct ancestors of a person as a pedigree tree, with standard Ahnentafel "
-        "numbering (subject 1, father 2n, mother 2n+1). Nodes at the depth limit are "
-        "flagged with has_more_ancestors when the line continues further back."
+        "numbering (subject 1, father 2n, mother 2n+1). Defaults to recorded natural-child "
+        "parentage only. Use lineage='all' to include adopted/foster parent edges, which "
+        "are labelled in results. Recorded natural parentage is NOT proof of biological "
+        "or historical descent. Nodes at the depth limit have has_more_ancestors."
     )
 )
 def get_ancestors(
-    person_id: int, generations: int = 4, language: str | None = None
+    person_id: int,
+    generations: int = 4,
+    language: str | None = None,
+    lineage: str = "biological",
 ) -> dict[str, Any]:
+    if lineage not in ("biological", "all"):
+        raise ToolError("Invalid lineage; expected 'biological' or 'all'")
     index = state.index(state.lang(language))
     _person_or_error(index, person_id)
-    return index.ancestors(person_id, max(1, min(int(generations), 15)))
+    return index.ancestors(
+        person_id, max(1, min(int(generations), 15)), natural_only=lineage == "biological"
+    )
 
 
 @mcp.tool(
@@ -443,10 +453,10 @@ def get_descendants(
 
 @mcp.tool(
     description=(
-        "How two people are related. Returns the shortest chain of parent, child and "
-        "spouse links between them plus a kinship label such as 'first cousin once "
-        "removed'. Paths routed through a marriage are labelled as relationships by "
-        "marriage, since no single English term applies."
+        "Shortest recorded family path between two people, with parentage labels "
+        "on every parent/child edge (natural, adopted, or foster), plus a kinship "
+        "label. Adopted/foster paths are explicitly flagged and must not be treated "
+        "as proof of biological descent. Spouse paths are relationships by marriage."
     )
 )
 def find_relationship_path(
@@ -638,6 +648,16 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _is_loopback_host(host: str) -> bool:
+    """Prevent unauthenticated genealogy data from being served on network interfaces."""
+    if host.strip().lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     logging.basicConfig(
@@ -649,6 +669,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.db_path and args.gedcom_path:
         print("error: pass either --db-path or --gedcom-path, not both", file=sys.stderr)
+        return 2
+
+    if args.transport != "stdio" and not _is_loopback_host(args.host):
+        print(
+            "error: remote HTTP is disabled (no MCP authentication is configured); "
+            "bind to a loopback address and use a vetted authenticated proxy",
+            file=sys.stderr,
+        )
         return 2
 
     source = args.gedcom_path or args.db_path
