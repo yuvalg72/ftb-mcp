@@ -19,7 +19,8 @@
 ### 1. Separate biological ancestry from adoptive/foster relationships (in progress)
 
 Default `get_ancestors` to natural-child edges, provide an explicit inclusive
-mode, and annotate every parent edge with its recorded family/role. Cover
+mode, annotate every parent edge and relationship-path step with its recorded
+family/role, and flag paths that use adoptive/foster parentage. Cover
 FTB and GEDCOM synthetic fixtures, cycles, depth limits, and counts.
 
 **Acceptance:** independent test for a foster/adopted child; no hidden
