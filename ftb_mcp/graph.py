@@ -288,11 +288,26 @@ class TreeIndex:
 
     # --------------------------------------------------------------------- relatives
 
-    def parents(self, person_id: int) -> list[int]:
-        out: list[int] = []
+    def parent_links(self, person_id: int, natural_only: bool = False) -> list[tuple[int, int, int]]:
+        """Return (parent_id, family_id, child's recorded role) for each parent edge.
+
+        A child in an adopted/foster family has parents in the family graph, but that
+        edge must not be treated as evidence of a biological pedigree.
+        """
+        out: list[tuple[int, int, int]] = []
         for fid in self.child_families.get(person_id, []):
-            out.extend(self.family_spouses.get(fid, []))
+            role = next(
+                (role for pid, role in self.family_children.get(fid, []) if pid == person_id),
+                None,
+            )
+            if role not in CHILD_ROLES or (natural_only and role not in NATURAL_CHILD_ROLES):
+                continue
+            out.extend((parent_id, fid, role) for parent_id in self.family_spouses.get(fid, []))
         return out
+
+    def parents(self, person_id: int, natural_only: bool = False) -> list[int]:
+        """Return recorded parents; natural_only excludes adoption and foster links."""
+        return [parent_id for parent_id, _, _ in self.parent_links(person_id, natural_only)]
 
     def children(self, person_id: int, natural_only: bool = False) -> list[int]:
         roles = NATURAL_CHILD_ROLES if natural_only else CHILD_ROLES
@@ -363,46 +378,74 @@ class TreeIndex:
 
     # --------------------------------------------------------------------- pedigrees
 
-    def ancestors(self, person_id: int, generations: int) -> dict[str, Any]:
-        """Pedigree upward with Ahnentafel numbering (subject 1, father 2n, mother 2n+1)."""
+    def ancestors(
+        self, person_id: int, generations: int, natural_only: bool = True
+    ) -> dict[str, Any]:
+        """Pedigree upward, defaulting to recorded natural-child edges only.
+
+        FTB roles are *recorded parentage*, not independent proof of biological descent.
+        When natural_only=False, adopted and foster ancestors are included explicitly
+        and each step carries its parentage classification.
+        """
         self.require(person_id)
 
-        def build(pid: int, depth: int, ahnentafel: int, seen: frozenset[int]) -> dict[str, Any]:
+        def build(
+            pid: int,
+            depth: int,
+            ahnentafel: int,
+            seen: frozenset[int],
+            via: tuple[int, int] | None = None,
+        ) -> dict[str, Any]:
             node = self.people[pid].summary()
             node["generation"] = depth
             node["ahnentafel"] = ahnentafel
-            # A corrupt file can make someone their own ancestor; mirror the cycle
-            # guard in descendants() so the pedigree stays finite and truthful.
-            parents = [p for p in self.parents(pid) if p not in seen]
+            if via is not None:
+                family_id, role = via
+                node["family_id"] = family_id
+                node["parentage_recorded_as"] = label_for(ROLE_TYPE, role)
+            # Guard against cycles in incorrect genealogical records.
+            parents = [
+                (parent_id, fid, role)
+                for parent_id, fid, role in self.parent_links(pid, natural_only)
+                if parent_id not in seen
+            ]
             if depth >= generations:
                 if parents:
                     node["has_more_ancestors"] = True
                 return node
 
             father = mother = None
-            for parent_id in parents:
-                parent = self.people[parent_id]
+            for link in parents:
+                parent = self.people[link[0]]
                 if parent.gender == "M" and father is None:
-                    father = parent_id
+                    father = link
                 elif parent.gender == "F" and mother is None:
-                    mother = parent_id
+                    mother = link
                 elif father is None:
-                    father = parent_id
+                    father = link
                 elif mother is None:
-                    mother = parent_id
+                    mother = link
 
             if father is not None:
-                node["father"] = build(father, depth + 1, ahnentafel * 2, seen | {father})
+                parent_id, fid, role = father
+                node["father"] = build(
+                    parent_id, depth + 1, ahnentafel * 2, seen | {parent_id}, (fid, role)
+                )
             if mother is not None:
-                node["mother"] = build(mother, depth + 1, ahnentafel * 2 + 1, seen | {mother})
+                parent_id, fid, role = mother
+                node["mother"] = build(
+                    parent_id, depth + 1, ahnentafel * 2 + 1, seen | {parent_id}, (fid, role)
+                )
             return node
 
         tree = build(person_id, 0, 1, frozenset({person_id}))
-        found = self._reachable(person_id, generations, upward=True)
+        found = self._reachable(person_id, generations, upward=True, natural_only=natural_only)
         return {
             "root": tree,
             "generations_requested": generations,
             "ancestors_found": len(found),
+            "lineage_mode": "biological" if natural_only else "all",
+            "recorded_parentage_is_not_proof": True,
         }
 
     def descendants(self, person_id: int, generations: int) -> dict[str, Any]:
@@ -433,7 +476,9 @@ class TreeIndex:
             "by_generation": {f"generation_{d}": n for d, n in sorted(by_generation.items())},
         }
 
-    def _reachable(self, person_id: int, generations: int, upward: bool) -> dict[int, int]:
+    def _reachable(
+        self, person_id: int, generations: int, upward: bool, natural_only: bool = False
+    ) -> dict[int, int]:
         """BFS returning {person_id: depth} excluding the starting person."""
         seen: dict[int, int] = {}
         queue = deque([(person_id, 0)])
@@ -442,7 +487,7 @@ class TreeIndex:
             pid, depth = queue.popleft()
             if depth >= generations:
                 continue
-            nexts = self.parents(pid) if upward else self.children(pid)
+            nexts = self.parents(pid, natural_only=natural_only) if upward else self.children(pid)
             for other in nexts:
                 if other in visited:
                     continue
