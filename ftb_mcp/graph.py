@@ -288,7 +288,9 @@ class TreeIndex:
 
     # --------------------------------------------------------------------- relatives
 
-    def parent_links(self, person_id: int, natural_only: bool = False) -> list[tuple[int, int, int]]:
+    def parent_links(
+        self, person_id: int, natural_only: bool = False
+    ) -> list[tuple[int, int, int]]:
         """Return (parent_id, family_id, child's recorded role) for each parent edge.
 
         A child in an adopted/foster family has parents in the family graph, but that
