@@ -9,6 +9,7 @@ never image bytes or file paths.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import logging
 import os
 import sys
@@ -647,6 +648,16 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _is_loopback_host(host: str) -> bool:
+    """Prevent unauthenticated genealogy data from being served on network interfaces."""
+    if host.strip().lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     logging.basicConfig(
@@ -658,6 +669,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.db_path and args.gedcom_path:
         print("error: pass either --db-path or --gedcom-path, not both", file=sys.stderr)
+        return 2
+
+    if args.transport != "stdio" and not _is_loopback_host(args.host):
+        print(
+            "error: remote HTTP is disabled (no MCP authentication is configured); "
+            "bind to a loopback address and use a vetted authenticated proxy",
+            file=sys.stderr,
+        )
         return 2
 
     source = args.gedcom_path or args.db_path
