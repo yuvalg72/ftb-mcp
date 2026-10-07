@@ -208,3 +208,19 @@ async def test_ancestor_lineage_is_explicit_and_validated():
 
     with pytest.raises(ToolError, match="Invalid lineage"):
         await call("get_ancestors", person_id=non_biological[0][0], lineage="unknown")
+
+
+def test_remote_http_bind_is_rejected_before_opening_tree(capsys):
+    assert server.main(["--db-path", "irrelevant.ftb", "--host", "0.0.0.0"]) == 2
+    assert "remote HTTP is disabled" in capsys.readouterr().err
+    assert server.main(["--db-path", "irrelevant.ftb", "--host", "192.168.1.10"]) == 2
+    assert server.main(["--db-path", "irrelevant.ftb", "--host", "::"]) == 2
+
+
+def test_only_explicit_loopback_hosts_are_accepted():
+    assert server._is_loopback_host("127.0.0.1")
+    assert server._is_loopback_host("::1")
+    assert server._is_loopback_host("localhost")
+    assert not server._is_loopback_host("0.0.0.0")
+    assert not server._is_loopback_host("example.com")
+    assert not server._is_loopback_host("192.168.1.20")
