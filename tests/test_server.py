@@ -187,7 +187,10 @@ async def test_ancestor_lineage_is_explicit_and_validated():
 
     for pid, fid, role in non_biological:
         inclusive_links = index.parent_links(pid)
-        assert any(link_fid == fid and link_role == role for _, link_fid, link_role in inclusive_links)
+        assert any(
+            link_fid == fid and link_role == role
+            for _, link_fid, link_role in inclusive_links
+        )
         assert all(link_fid != fid for _, link_fid, _ in index.parent_links(pid, natural_only=True))
 
         biological = await call("get_ancestors", person_id=pid, generations=1)
