@@ -224,3 +224,30 @@ def test_only_explicit_loopback_hosts_are_accepted():
     assert not server._is_loopback_host("0.0.0.0")
     assert not server._is_loopback_host("example.com")
     assert not server._is_loopback_host("192.168.1.20")
+
+
+@pytest.mark.anyio
+async def test_relationship_path_flags_adoptive_and_foster_ties():
+    from ftb_mcp.schema import ROLE_ADOPTED_CHILD, ROLE_FOSTER_CHILD
+
+    index = server.state.index(server.state.default_lang)
+    checked = 0
+    for fid, children in index.family_children.items():
+        for child_id, role in children:
+            if role not in (ROLE_ADOPTED_CHILD, ROLE_FOSTER_CHILD):
+                continue
+            parents = index.family_spouses.get(fid, [])
+            assert parents, "non-natural child fixture must have recorded parents"
+            relationship = await call(
+                "find_relationship_path",
+                person_id_a=parents[0],
+                person_id_b=child_id,
+            )
+            assert relationship["found"]
+            assert relationship["includes_non_natural_parentage"] is True
+            assert relationship["steps"][0]["parentage_recorded_as"] in (
+                "adopted child", "foster child"
+            )
+            assert "adoptive/foster" in relationship["relationship"]
+            checked += 1
+    assert checked >= 2
