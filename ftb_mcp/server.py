@@ -414,16 +414,25 @@ def get_relatives(
 @mcp.tool(
     description=(
         "Direct ancestors of a person as a pedigree tree, with standard Ahnentafel "
-        "numbering (subject 1, father 2n, mother 2n+1). Nodes at the depth limit are "
-        "flagged with has_more_ancestors when the line continues further back."
+        "numbering (subject 1, father 2n, mother 2n+1). Defaults to recorded natural-child "
+        "parentage only. Use lineage='all' to include adopted/foster parent edges, which "
+        "are labelled in results. Recorded natural parentage is NOT proof of biological "
+        "or historical descent. Nodes at the depth limit have has_more_ancestors."
     )
 )
 def get_ancestors(
-    person_id: int, generations: int = 4, language: str | None = None
+    person_id: int,
+    generations: int = 4,
+    language: str | None = None,
+    lineage: str = "biological",
 ) -> dict[str, Any]:
+    if lineage not in ("biological", "all"):
+        raise ToolError("Invalid lineage; expected 'biological' or 'all'")
     index = state.index(state.lang(language))
     _person_or_error(index, person_id)
-    return index.ancestors(person_id, max(1, min(int(generations), 15)))
+    return index.ancestors(
+        person_id, max(1, min(int(generations), 15)), natural_only=lineage == "biological"
+    )
 
 
 @mcp.tool(
