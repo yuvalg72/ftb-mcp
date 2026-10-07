@@ -170,3 +170,38 @@ async def test_media_never_leaks_binary_or_paths():
     media = await call("get_media_metadata", limit=50)
     for item in media["results"]:
         assert set(item) <= {"media_item_id", "title", "description", "date", "place", "person_id"}
+
+
+@pytest.mark.anyio
+async def test_ancestor_lineage_is_explicit_and_validated():
+    from ftb_mcp.schema import ROLE_ADOPTED_CHILD, ROLE_FOSTER_CHILD
+
+    index = server.state.index(server.state.default_lang)
+    non_biological = [
+        (pid, fid, role)
+        for fid, children in index.family_children.items()
+        for pid, role in children
+        if role in (ROLE_ADOPTED_CHILD, ROLE_FOSTER_CHILD)
+    ]
+    assert non_biological, "sample fixture should exercise adoptive/foster relationships"
+
+    for pid, fid, role in non_biological:
+        inclusive_links = index.parent_links(pid)
+        assert any(link_fid == fid and link_role == role for _, link_fid, link_role in inclusive_links)
+        assert all(link_fid != fid for _, link_fid, _ in index.parent_links(pid, natural_only=True))
+
+        biological = await call("get_ancestors", person_id=pid, generations=1)
+        inclusive = await call("get_ancestors", person_id=pid, generations=1, lineage="all")
+        assert biological["lineage_mode"] == "biological"
+        assert inclusive["lineage_mode"] == "all"
+        assert inclusive["recorded_parentage_is_not_proof"] is True
+        assert inclusive["ancestors_found"] >= biological["ancestors_found"]
+        # Every direct parent edge included in the pedigree is explicitly labelled.
+        for branch in ("father", "mother"):
+            if branch in inclusive["root"]:
+                assert inclusive["root"][branch]["parentage_recorded_as"] in (
+                    "natural child", "adopted child", "foster child"
+                )
+
+    with pytest.raises(ToolError, match="Invalid lineage"):
+        await call("get_ancestors", person_id=non_biological[0][0], lineage="unknown")
