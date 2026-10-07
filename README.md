@@ -78,7 +78,7 @@ claude mcp add --transport http ftb http://127.0.0.1:8000/mcp
 | Tool | Purpose |
 |---|---|
 | `get_relatives` | Parents, siblings, spouses, children with relationship types |
-| `get_ancestors` | Pedigree with Ahnentafel numbering |
+| `get_ancestors` | Pedigree with Ahnentafel numbering; `lineage=biological` (default) excludes adopted/foster links; `lineage=all` includes them with recorded parentage labels |
 | `get_descendants` | Descendant tree with per-generation counts |
 | `find_relationship_path` | Shortest kinship path plus a label such as `first cousin once removed` |
 | `get_family` | One family: spouses, status, marriage/divorce events, ordered children |
@@ -99,6 +99,18 @@ the language actually used when it differs from the one requested.
 Media tools deliberately return no image bytes, no file names and no paths. Scanned-record
 descriptions often carry genealogical detail found nowhere else, so their text is exposed;
 the binary content is not.
+
+## Genealogical evidence and lineage safety
+
+`get_ancestors` defaults to **recorded natural-child** relationships, not all
+family ties. This prevents an adoptive or foster path from silently being presented
+as biological descent. Specify `lineage="all"` to include every recorded parent
+relationship; the returned nodes carry `parentage_recorded_as` and `family_id`.
+Other family tools continue to include adoptive/foster relationships.
+
+**Important:** An FTB/GEDCOM natural-child flag is an assertion in an editable
+family tree, not proof of biological or historical ancestry. Validate each
+generational link against independent sources before claiming a lineage.
 
 ## GEDCOM support
 
