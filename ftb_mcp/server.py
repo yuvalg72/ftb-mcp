@@ -453,10 +453,10 @@ def get_descendants(
 
 @mcp.tool(
     description=(
-        "How two people are related. Returns the shortest chain of parent, child and "
-        "spouse links between them plus a kinship label such as 'first cousin once "
-        "removed'. Paths routed through a marriage are labelled as relationships by "
-        "marriage, since no single English term applies."
+        "Shortest recorded family path between two people, with parentage labels "
+        "on every parent/child edge (natural, adopted, or foster), plus a kinship "
+        "label. Adopted/foster paths are explicitly flagged and must not be treated "
+        "as proof of biological descent. Spouse paths are relationships by marriage."
     )
 )
 def find_relationship_path(
